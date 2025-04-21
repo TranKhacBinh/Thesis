@@ -1,0 +1,154 @@
+Thuật toán 1: ScanDB
+Input: s, the SHUI to hide;
+       D, the original database.
+			  
+Output: u_s, the utility of s in D;
+	TID_s, the list of sensitive transaction IDs;
+	UT_s, the list of utilities of s in each sensitive transaction.
+			
+1. u_s ← 0
+2. TID_s ← []
+3. UT_s ← []
+4. For each transaction T_n ∈ D do:
+       ut ← u(s, T_n)
+       If ut > 0 then:
+             Append T_n.ID to TID_s
+             Append ut to UT_s
+             u_s ← u_s + ut
+5. Return (u_s, TID_s, UT_s)
+
+
+Thuật toán 2: GetVictimItem
+Input: s, the SHUI to hide;
+       U_ns, the dictionary mapping each NSHUI to its utility in D.
+
+Output: i_v, the victim item is selected from s;
+	R, the set of NSHUIs containing i_v.
+				
+1.  A ← {}
+2.  For each item i_m ∈ s do:
+3.      A[i_m] ← []
+4.  For each item i_m ∈ s do:
+5.      For each itemset X ∈ U_ns do:
+6.          If i_m ∈ X then:
+7.              Append X to A[i_m]
+8. i_v ← \argmin_{i_m ∈ s} |A[i_m]|
+9. R ← A[i_v]
+10. Return (i_v, R)
+
+
+Thuật toán 3 ComputeObjective
+Input: V, the set of selected victim transaction IDs;
+       δ, the minimum utility threshold;
+       u_s, the utility of s in D;
+       TID_s, the list of sensitive transaction IDs;
+       UT_s, the list of utilities of s in each sensitive transaction;
+       R, the set of NSHUIs containing i_v;
+       U_ns, the dictionary mapping each NSHUI to its utility in D;
+       UT_ns, the dictionary mapping each NSHUI to its list of utilities in each sensitive transaction.
+
+Output: the value of the objective function.
+
+1.   ur ← u_s
+2.   For each ID q ∈ V do:
+3.       idx ← TID_s.index(q)
+4.       ur ← ur - UT_s[idx]
+5.   I ← If ur ≥ δ then 1 else 0
+6.   β ← 0
+7.   For each itemset X ∈ R do:
+8.       u_X ← U_ns[X]
+9.       For each ID q ∈ V do:
+10.           idx ← TID_s.index(q)
+11.           u_X ← u_X - UT_ns[X][idx]
+12.       If u_X < δ then β ← β + 1
+13.   Return I × (|R| + 1) + β
+
+
+Thuật toán 4: FindMaxVictimTrans
+Input: u_s, the utility of s in D;
+       UT_s, the list of utilities of s in each sensitive transaction;
+       δ, the minimum utility threshold.
+
+Output: k, the maximum number of victim transactions.
+
+1.  Sort UT_s in increasing order
+2.  k ← 1
+3.  cum ← 0
+4.  For each ut ∈ UT_s do:
+5.      cum ← cum + ut
+6.      If (u_s - cum) < δ then:
+7.          Break the loop
+8.      k ← k + 1
+9.  Return k
+
+
+Thuật toán 5: OptimizeVictimTrans
+Input: TID_s, the list of sensitive transaction IDs;
+       k, the maximum number of victim transactions;
+       params, the parameters required to calculate the objective function;
+       M, the number of initial candidates;
+       i_max, the maximum number of iterations.
+
+Output: V*, the set of optimized victim transactions IDs.
+
+1.  C ← GenerateInitialCandidates(TID_s, M, k)
+2.  i ← 0
+3.  While i < i_max do:
+4.      For each candidate c ∈ C do:
+5.          c.value ← ComputeObjective(c, params) 
+6.      C ← UpdateCandidates(C) // Apply stochastic operations
+7.      i ← i + 1
+8.  V* ← \argmin_{c ∈ C} c.value
+9.  Return V*
+
+
+Thuật toán 6: UpdateNSHUI
+Input: R, the set of NSHUIs containing i_v;
+       U_ns, the dictionary mapping each NSHUI to its utility in D;
+       UT_ns, the dictionary mapping each NSHUI to its list of utilities in each sensitive transaction;
+       V*, the set of optimized victim transactions IDs;
+       TID_s, the list of sensitive transaction IDs;
+       δ, the minimum utility threshold.
+			 
+Output: U_ns', update of U_ns.
+
+1.  For each itemset X ∈ R do:
+2.      For each ID q in V* do:
+3.	    idx ← TID_s.index(q)
+4.          U_ns[X] ← U_ns[X] - UT_ns[X][idx]
+5.  U_ns' ← {}
+6.  For each (X, u_X) ∈ U_ns do:
+7.	    If u_X ≥ δ then:
+8.          Append (X, u_X) to U_ns'
+9.  Return U_ns'
+
+
+Thuật toán 7: SO2DI
+Input: D, the original database;
+       I_S, the set of SHUIs to be hidden;
+       I_H, the set of HUIs mined from D;
+       δ, the minimum utility threshold;
+       M, the number of initial candidates;
+       i_max, the maximum number of iterations.
+			 
+Output: D', the sanitized database.
+
+1.  D' ← Copy(D)
+2.  U_ns ← { (X, u_X) ∈ I_H | X ∉ I_S }
+3.  For each itemset s ∈ I_S do:
+4.      (u_s, TID_s, UT_s) ← ScanDB(s, D')
+5.      If u_s < δ then Continue
+6.      (i_v, R) ← GetVictimItem(s, U_ns)
+7.      k ← FindMaxVictimTrans(u_s, UT_s, δ)
+8.	UT_ns ← {}
+9.	For each itemset X ∈ R do:
+10.         UT_ns[X] ← []
+11.         For each ID q ∈ TID_s do:
+12.             Append u(X, D'[q]) to UT_ns[X]
+13.	params ← (δ, u_s, TID_s, UT_s, R, U_ns, UT_ns)
+14.     V* ← OptimizeVictimTrans(TID_s, k, params, M, i_max)
+15.     For each ID q ∈ V* do:
+16.         Remove i_v from D'[q]
+17.     If s is not the last element in I_S then:
+18.         U_ns ← UpdateNSHUI(R, U_ns, UT_ns, V*, TID_s, δ)
+19. Return D'
